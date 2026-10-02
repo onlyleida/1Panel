@@ -25,6 +25,15 @@
                 <el-button v-permission type="primary" @click="onContainerOperate('')">
                     {{ $t('commons.button.create') }}
                 </el-button>
+                <el-button
+                    v-permission
+                    type="primary"
+                    plain
+                    :disabled="selects.length === 0"
+                    @click="onOperate('restart', null)"
+                >
+                    {{ $t('commons.button.restart') }}
+                </el-button>
                 <el-button v-permission type="primary" plain @click="onImportCreate()">
                     {{ $t('commons.button.import') }}
                 </el-button>
