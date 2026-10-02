@@ -56,6 +56,8 @@
             </template>
             <template #main>
                 <ComplexTable
+                    ref="containerTableRef"
+                    reserve-selection
                     :pagination-config="paginationConfig"
                     v-model:view-mode="viewMode"
                     v-model:selects="selects"
@@ -69,7 +71,7 @@
                     localKey="containerColumn"
                     :heightDiff="300"
                 >
-                    <el-table-column type="selection" width="32" />
+                    <el-table-column type="selection" width="32" reserve-selection />
                     <el-table-column
                         :label="$t('commons.table.name')"
                         min-width="250"
@@ -110,7 +112,21 @@
                         show-overflow-tooltip
                         min-width="180"
                         prop="imageName"
-                    />
+                    >
+                        <template #default="{ row }">
+                            <el-text
+                                type="primary"
+                                class="cursor-pointer"
+                                role="button"
+                                tabindex="0"
+                                @click.stop="selectContainersByImage(row)"
+                                @keydown.enter.prevent="selectContainersByImage(row)"
+                                @keydown.space.prevent="selectContainersByImage(row)"
+                            >
+                                {{ row.imageName }}
+                            </el-text>
+                        </template>
+                    </el-table-column>
                     <el-table-column
                         card-type="status"
                         :label="$t('commons.table.status')"
@@ -420,6 +436,9 @@
                                 {{ $t('website.batchOperate') }}
                                 <span class="ml-1" v-if="selects.length > 0">({{ selects.length }})</span>
                             </el-button>
+                            <el-button v-if="selects.length" @click="containerTableRef?.clearSelects()">
+                                {{ $t('commons.button.cancel') }}
+                            </el-button>
                         </div>
                     </template>
                 </ComplexTable>
@@ -488,7 +507,7 @@ import Uploads from '@/components/upload/index.vue';
 import DockerStatus from '@/views/container/docker-status/index.vue';
 import ContainerLogDialog from '@/components/log/container-drawer/index.vue';
 import Status from '@/components/status/index.vue';
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import {
     containerItemStats,
     containerListStats,
@@ -524,6 +543,9 @@ const portsDialogContainer = ref('');
 const portFilter = ref('');
 const showIPv6Ports = ref(true);
 const selects = ref<any>([]);
+const containerTableRef = ref();
+const selectingImage = ref(false);
+let selectionContext = 0;
 const paginationConfig = reactive({
     cacheSizeKey: 'container-page-size',
     currentPage: 1,
@@ -699,6 +721,60 @@ const containerInspectRef = ref();
 const dialogContainerLogRef = ref();
 const dialogRenameRef = ref();
 const dialogPruneRef = ref();
+
+watch(
+    [
+        searchName,
+        () => paginationConfig.state,
+        includeAppStore,
+        () => router.currentRoute.value.query.filters,
+        currentNode,
+    ],
+    () => {
+        selectionContext++;
+        containerTableRef.value?.clearSelects();
+    },
+    { flush: 'sync' },
+);
+
+const selectContainersByImage = async (row: Container.ContainerInfo) => {
+    if (selectingImage.value) return;
+    const context = selectionContext;
+    selectingImage.value = true;
+    try {
+        let containers = data.value;
+        if (paginationConfig.total > data.value.length) {
+            containers = [];
+            const params = {
+                name: searchName.value,
+                state: paginationConfig.state || 'all',
+                filters: (router.currentRoute.value.query?.filters as string) || '',
+                orderBy: paginationConfig.orderBy,
+                order: paginationConfig.order,
+                excludeAppStore: !includeAppStore.value,
+                page: 1,
+                pageSize: 500,
+            };
+            let total = 0;
+            do {
+                const result = await searchContainer(params);
+                if (context !== selectionContext) return;
+                const items = result.data.items || [];
+                containers.push(...items);
+                total = result.data.total;
+                if (!items.length) break;
+                params.page++;
+            } while (containers.length < total);
+        }
+        if (context !== selectionContext) return;
+        const matches = containers.filter((item) =>
+            row.imageID && item.imageID ? item.imageID === row.imageID : item.imageName === row.imageName,
+        );
+        containerTableRef.value?.selectRows(matches);
+    } finally {
+        selectingImage.value = false;
+    }
+};
 
 const search = async (column?: any) => {
     if (!isActive.value || !isExist.value) {

@@ -7,6 +7,7 @@ export const useTableSelection = (
     getTableData: () => any[],
     onSelectionChange: (rows: any[]) => void,
     isRowSelectable: (row: any) => boolean = () => true,
+    options: { getRowKey?: (row: any) => unknown; reserveSelection?: () => boolean } = {},
 ) => {
     const selectedRows = shallowRef<any[]>([]);
     const shiftPressed = ref(false);
@@ -16,7 +17,8 @@ export const useTableSelection = (
     let skipNextSelectionChange = false;
 
     // Element Plus can return reactive proxies for rows supplied as plain objects.
-    const sameRow = (left: any, right: any) => toRaw(left) === toRaw(right);
+    const sameRow = (left: any, right: any) =>
+        options.getRowKey ? options.getRowKey(left) === options.getRowKey(right) : toRaw(left) === toRaw(right);
     const hasRow = (rows: any[], row: any) => rows.some((item) => sameRow(item, row));
     const isRowSelected = (row: any) => hasRow(selectedRows.value, row);
     const getTable = () => tableRef.value?.refElTable;
@@ -37,13 +39,19 @@ export const useTableSelection = (
         isSyncingTableSelection = true;
         try {
             const tableData = getTableData();
-            const nextRows = selectedRows.value.filter((row) => hasRow(tableData, row) && isRowSelectable(row));
+            const nextRows = tableData.filter((row) => hasRow(selectedRows.value, row) && isRowSelectable(row));
             const currentRows = table.getSelectionRows();
             currentRows.filter((row) => !hasRow(nextRows, row)).forEach((row) => table.toggleRowSelection(row, false));
             nextRows.filter((row) => !hasRow(currentRows, row)).forEach((row) => table.toggleRowSelection(row, true));
         } finally {
             isSyncingTableSelection = false;
         }
+    };
+    const selectRows = (rows: any[]) => {
+        const nextRows = [...selectedRows.value];
+        rows.filter(isRowSelectable).forEach((row) => !hasRow(nextRows, row) && nextRows.push(row));
+        setSelectedRows(nextRows);
+        syncTableSelection();
     };
     const selectRow = (row: any, selected = !isRowSelected(row)) => {
         if (!isRowSelectable(row)) {
@@ -81,8 +89,13 @@ export const useTableSelection = (
             syncTableSelection();
             return;
         }
-        setSelectedRows(rows);
-        if (rows.length === 0) {
+        const offPageRows = options.reserveSelection?.()
+            ? selectedRows.value.filter((row) => !hasRow(getTableData(), row))
+            : [];
+        const nextRows = [...offPageRows];
+        rows.forEach((row) => !hasRow(nextRows, row) && nextRows.push(row));
+        setSelectedRows(nextRows);
+        if (selectedRows.value.length === 0) {
             lastSelectedRow.value = null;
             rangeBaseRows.value = [];
         }
@@ -94,7 +107,10 @@ export const useTableSelection = (
             return;
         }
         lastSelectedRow.value = row;
-        rangeBaseRows.value = selection.filter((item) => !sameRow(item, row));
+        const offPageRows = options.reserveSelection?.()
+            ? selectedRows.value.filter((item) => !hasRow(getTableData(), item))
+            : [];
+        rangeBaseRows.value = [...offPageRows, ...selection.filter((item) => !sameRow(item, row))];
         clearTextSelection();
     };
     const clearSelects = () => {
@@ -104,8 +120,14 @@ export const useTableSelection = (
         rangeBaseRows.value = [];
     };
     const pruneSelection = () => {
-        const nextRows = selectedRows.value.filter((row) => hasRow(getTableData(), row));
-        if (nextRows.length !== selectedRows.value.length) {
+        const tableData = getTableData();
+        const nextRows = selectedRows.value
+            .filter((row) => options.reserveSelection?.() || hasRow(tableData, row))
+            .map((row) => tableData.find((item) => sameRow(item, row)) || row);
+        if (
+            nextRows.length !== selectedRows.value.length ||
+            nextRows.some((row, index) => row !== selectedRows.value[index])
+        ) {
             setSelectedRows(nextRows);
         }
         if (lastSelectedRow.value && !hasRow(nextRows, lastSelectedRow.value)) {
@@ -158,6 +180,7 @@ export const useTableSelection = (
         pruneSelection,
         toggleSelection,
         selectRow,
+        selectRows,
         syncTableSelection,
         handleSelect,
         handleSelectionChange,

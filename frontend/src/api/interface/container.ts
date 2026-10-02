@@ -138,6 +138,7 @@ export namespace Container {
     export interface ContainerInfo {
         containerID: string;
         name: string;
+        imageID: string;
         imageName: string;
         createTime: string;
         state: string;

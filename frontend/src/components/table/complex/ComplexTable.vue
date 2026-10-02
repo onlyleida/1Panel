@@ -184,6 +184,10 @@ type ViewMode = 'table' | 'card';
 
 const props = defineProps({
     header: String,
+    reserveSelection: {
+        type: Boolean,
+        default: false,
+    },
     paginationConfig: {
         type: Object,
         required: false,
@@ -307,13 +311,17 @@ const {
     pruneSelection,
     toggleSelection,
     selectRow,
+    selectRows,
     syncTableSelection,
     handleSelect,
     handleSelectionChange: syncSelectionChange,
     handleRowClick,
     handleKeyDown: handleSelectionKeyDown,
     handleKeyUp,
-} = useTableSelection(tableRef, getTableData, (rows) => emit('update:selects', rows), isRowSelectable);
+} = useTableSelection(tableRef, getTableData, (rows) => emit('update:selects', rows), isRowSelectable, {
+    getRowKey: props.reserveSelection ? (row) => getRowKey(row, 0) : undefined,
+    reserveSelection: () => props.reserveSelection,
+});
 const toggleCardSelection = (row: any, selected: boolean) => {
     selectRow(row, selected);
 };
@@ -400,6 +408,7 @@ watch(
 );
 
 defineExpose({
+    selectRows,
     clearSelects,
     sort,
     clearSort,
