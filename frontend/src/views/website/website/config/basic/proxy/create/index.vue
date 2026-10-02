@@ -299,7 +299,7 @@ const initData = (): Website.ProxyConfig => ({
     preflight: true,
 });
 let proxy = ref(initData());
-const replaces = ref<any>([]);
+const replaces = ref<{ key: string; value: string }[]>([]);
 const em = defineEmits(['close']);
 const handleClose = () => {
     proxyForm.value?.resetFields();
